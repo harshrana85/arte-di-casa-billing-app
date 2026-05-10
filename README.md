@@ -25,3 +25,8 @@ Main file: app.py
 - Click Import Word.
 - Review/edit products and customer details.
 - Save as proforma or convert to invoice, then add packing details.
+
+## Word Invoice Import Update
+- Invoice DOCX imports now read the packing list table when present.
+- Imported packing rows include Box No, Part, Brand, Product Details, L, B, H, CBM, GW and NW.
+- Packing summary is rebuilt automatically after import.

@@ -649,6 +649,35 @@ def parse_amount_value(value):
         return 0.0
 
 
+def parse_gw_nw(value):
+    """Return gross/net weights from combined values such as '12 / 10' or 'GW 12 NW 10'."""
+    txt = str(value or "").replace("KG", "").replace("kg", "").strip()
+    if "/" in txt:
+        left, right = txt.split("/", 1)
+        return parse_amount_value(left), parse_amount_value(right)
+    nums = []
+    current = ""
+    for ch in txt:
+        if ch.isdigit() or ch in ".-":
+            current += ch
+        elif current:
+            try:
+                nums.append(float(current))
+            except Exception:
+                pass
+            current = ""
+    if current:
+        try:
+            nums.append(float(current))
+        except Exception:
+            pass
+    if len(nums) >= 2:
+        return nums[0], nums[1]
+    if len(nums) == 1:
+        return nums[0], 0.0
+    return 0.0, 0.0
+
+
 def parse_word_upload(uploaded_file, docs):
     """Import an extracted DOCX/proforma/invoice into the app's editable document structure."""
     document = Document(uploaded_file)
@@ -749,6 +778,62 @@ def parse_word_upload(uploaded_file, docs):
                     "Qty": qty,
                     "Rate Per Piece": rate,
                 })
+
+        # Packing list rows: SL, Box No, Part, Brand, Product Details, L/B/H, CBM, GW/NW
+        if (("box" in header_join or "box no" in header_join) and "cbm" in header_join) or ("gw" in header_join and "nw" in header_join and "product" in header_join):
+            def find_col(*names):
+                for name in names:
+                    for idx, h in enumerate(header):
+                        if name == h or name in h:
+                            return idx
+                return None
+
+            box_i = find_col("box no", "box")
+            part_i = find_col("part")
+            brand_i = find_col("brand")
+            prod_i = find_col("product details", "description", "product")
+            length_i = find_col("length", "l")
+            breadth_i = find_col("breadth", "b")
+            height_i = find_col("height", "h")
+            cbm_i = find_col("cbm")
+            gw_i = find_col("gw")
+            nw_i = find_col("nw")
+            gwnw_i = find_col("gw/nw", "gw / nw")
+
+            imported_packing = []
+            for row in rows[1:]:
+                def cell(i): return row[i].strip() if i is not None and i < len(row) else ""
+                brand = cell(brand_i)
+                details = cell(prod_i)
+                if not brand and not details:
+                    continue
+                gw = parse_amount_value(cell(gw_i)) if gw_i is not None and gw_i != gwnw_i else 0.0
+                nw = parse_amount_value(cell(nw_i)) if nw_i is not None and nw_i != gwnw_i else 0.0
+                if (not gw and not nw) and gwnw_i is not None:
+                    gw, nw = parse_gw_nw(cell(gwnw_i))
+                length = parse_amount_value(cell(length_i))
+                breadth = parse_amount_value(cell(breadth_i))
+                height = parse_amount_value(cell(height_i))
+                cbm = parse_amount_value(cell(cbm_i))
+                if not cbm:
+                    cbm = round(length * breadth * height / 1000000, 3)
+                imported_packing.append({
+                    "Box No": int(parse_amount_value(cell(box_i)) or len(imported_packing) + 1),
+                    "Part": cell(part_i) or "1/1",
+                    "Brand": brand,
+                    "Product Details": details,
+                    "Length": length,
+                    "Breadth": breadth,
+                    "Height": height,
+                    "CBM": cbm,
+                    "GW": gw,
+                    "NW": nw,
+                })
+
+            if imported_packing:
+                imported["type"] = "Invoice"
+                imported["packing"] = clean_packing_rows(imported_packing)
+                imported["packing_summary"] = packing_summary(imported["packing"])
 
         # Bill/ship table from this app's Word export.
         if len(rows) == 1 and len(rows[0]) >= 1 and "bill to" in rows[0][0].lower():
