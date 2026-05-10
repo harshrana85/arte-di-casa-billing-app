@@ -28,57 +28,29 @@ DATA_DIR.mkdir(exist_ok=True)
 ASSETS_DIR.mkdir(exist_ok=True)
 
 COMPANY = {
-    "name": "ARTE DI CASA - F.Z.E",
-    "address": "Ajman Free Zone C1 Building, Premises Number B.C. 1302226, Ajman Free Zone, Ajman, United Arab Emirates",
-    "license": "LICENSE / REGISTRATION NO. 41814",
-    "trn": "TRN: 105089220500003",
-    "phone": "+39 3333920771 / +971 55 737 7933",
-    "email": "operations@artedicasaae.co",
+    "name": "CASA ARTE PRIVEE FZ-LLC",
+    "address": "AL Hulaila Industrial Zone-FZ, Ras Al Khaimah, United Arab Emirates",
+    "license": "LICENCE NO. 5038159",
+    "phone": "+393333920771 / +971585911456",
+    "email": "casaartepriveefze@artedicasaae.co",
 }
-
-VAT_RATE = 0.05
 
 BANKS = {
     "EUR": [
-        {"Bank Name":"WIO BANK PJSC","Currency":"EUR","IBAN":"AE300860000009539228335","SWIFT/BIC":"WIOBAEADXXX","Bank Address":"Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE, P.O. Box: 112437"},
+        {"Bank Name":"MASHREQ BANK PSC UAE","Currency":"EUR","IBAN":"AE830330000019102080621","SWIFT/BIC":"BOMLAEADXXX","Bank Address":"Umniyati Street, Burj Khalifa Community, Dubai, UAE. Postal Address: P.O. Box 1250, Dubai, UAE."},
+        {"Bank Name":"WIO BANK PJSC","Currency":"EUR","IBAN":"AE830860000009168276489","SWIFT/BIC":"WIOBAEADXXX","Bank Address":"Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE."},
     ],
     "USD": [
-        {"Bank Name":"WIO BANK PJSC","Currency":"USD","IBAN":"AE310860000009738781276","SWIFT/BIC":"WIOBAEADXXX","Bank Address":"Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE, P.O. Box: 112437"},
+        {"Bank Name":"MASHREQ BANK PSC UAE","Currency":"USD","IBAN":"AE130330000019102080620","SWIFT/BIC":"BOMLAEADXXX","Bank Address":"Umniyati Street, Burj Khalifa Community, Dubai, UAE. Postal Address: P.O. Box 1250, Dubai, UAE."},
+        {"Bank Name":"WIO BANK PJSC","Currency":"USD","IBAN":"AE480860000009878943739","SWIFT/BIC":"WIOBAEADXXX","Bank Address":"Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE."},
     ],
     "AED": [
-        {"Bank Name":"WIO BANK PJSC","Currency":"AED","IBAN":"","SWIFT/BIC":"WIOBAEADXXX","Bank Address":"Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE, P.O. Box: 112437"},
+        {"Bank Name":"WIO BANK PJSC","Currency":"AED","IBAN":"AE730860000009886170371","SWIFT/BIC":"WIOBAEADXXX","Bank Address":"Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE."},
     ],
 }
 
 PRODUCT_COLS = ["Brand","Product Details","Size","Finish","Qty","Rate Per Piece"]
 PACK_COLS = ["Box No","Part","Brand","Product Details","Length","Breadth","Height","CBM","GW","NW"]
-
-
-def product_row_id():
-    return str(uuid.uuid4())
-
-
-def prepare_product_rows(rows):
-    prepared = []
-    for row in rows or []:
-        new_row = dict(row)
-        new_row.setdefault("_row_id", product_row_id())
-        for col in PRODUCT_COLS:
-            if col not in new_row:
-                new_row[col] = 0.0 if col in ["Qty", "Rate Per Piece"] else ""
-        prepared.append(new_row)
-    if not prepared:
-        prepared.append({"_row_id": product_row_id(), "Brand":"", "Product Details":"", "Size":"", "Finish":"", "Qty":1.0, "Rate Per Piece":0.0})
-    return prepared
-
-
-def strip_product_rows(rows):
-    cleaned = []
-    for row in rows or []:
-        item = {col: row.get(col, 0.0 if col in ["Qty", "Rate Per Piece"] else "") for col in PRODUCT_COLS}
-        if str(item.get("Brand", "")).strip() or str(item.get("Product Details", "")).strip() or float(item.get("Qty", 0) or 0) or float(item.get("Rate Per Piece", 0) or 0):
-            cleaned.append(item)
-    return cleaned
 
 def load_json(path, default):
     if not path.exists():
@@ -100,7 +72,7 @@ def money(v, currency):
     return f"{symbol} {float(v or 0):,.2f}"
 
 def number_prefix(doc_type):
-    return "ADC/PI" if doc_type == "Proforma Invoice" else "ADC/INV"
+    return "CAP/PI" if doc_type == "Proforma Invoice" else "CAP/INV"
 
 def next_number(doc_type, docs):
     prefix = number_prefix(doc_type)
@@ -115,15 +87,13 @@ def next_number(doc_type, docs):
                 pass
     return f"{prefix}/{year}/{(max(nums) if nums else 0)+1:04d}"
 
-def calculate(products, discount_type, discount_value, shipping_enabled, shipping_cost, vat_mode="VAT 5%"):
+def calculate(products, discount_type, discount_value, shipping_enabled, shipping_cost):
     subtotal = 0.0
     for p in products:
         subtotal += float(p.get("Qty",0) or 0) * float(p.get("Rate Per Piece",0) or 0)
     discount = subtotal * float(discount_value or 0) / 100 if discount_type == "Percentage" else float(discount_value or 0)
     shipping = float(shipping_cost or 0) if shipping_enabled else 0.0
-    taxable_base = subtotal - discount + shipping
-    vat_amount = round(taxable_base * VAT_RATE, 2) if vat_mode == "VAT 5%" else 0.0
-    return subtotal, discount, shipping, vat_amount, taxable_base + vat_amount
+    return subtotal, discount, shipping, subtotal - discount + shipping
 
 
 def is_real_packing_row(row):
@@ -238,15 +208,15 @@ def pdf_header_footer(canvas, doc, title=""):
         )
 
     # Header text
-    canvas.setFillColor(colors.HexColor("#2f80c4"))
+    canvas.setFillColor(colors.HexColor("#071c2e"))
     canvas.setFont("Helvetica-Bold", 11)
     canvas.drawRightString(w - 12 * mm, h - 15 * mm, COMPANY["name"])
 
-    canvas.setFillColor(colors.HexColor("#5b9bd5"))
+    canvas.setFillColor(colors.HexColor("#9b763c"))
     canvas.setFont("Helvetica-Bold", 9)
     canvas.drawRightString(w - 12 * mm, h - 20 * mm, title)
 
-    canvas.setStrokeColor(colors.HexColor("#7db5e8"))
+    canvas.setStrokeColor(colors.HexColor("#d0aa65"))
     canvas.line(12 * mm, h - 27 * mm, w - 12 * mm, h - 27 * mm)
 
     # Stamp bottom right
@@ -281,7 +251,7 @@ def pdf_header_footer(canvas, doc, title=""):
     canvas.drawCentredString(
         w / 2,
         8 * mm,
-        f"{COMPANY['name']} | {COMPANY['trn']} | {COMPANY['email']} | Page {canvas.getPageNumber()}"
+        f"{COMPANY['name']} | {COMPANY['email']} | Page {canvas.getPageNumber()}"
     )
 
     canvas.restoreState()
@@ -308,6 +278,69 @@ def number_to_words(n):
         return number_to_words(n // 1000000) + " Million" + ((" " + number_to_words(n % 1000000)) if n % 1000000 else "")
     return number_to_words(n // 1000000000) + " Billion" + ((" " + number_to_words(n % 1000000000)) if n % 1000000000 else "")
 
+
+def extract_docx_to_document(uploaded_file, existing_terms=""):
+    doc = Document(uploaded_file)
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
+    full_text = "\n".join(paragraphs)
+
+    products = []
+    for table in doc.tables:
+        rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+        if not rows:
+            continue
+        headers = [h.lower() for h in rows[0]]
+        if not (any("brand" in h for h in headers) or any("product" in h for h in headers) or any("description" in h for h in headers)):
+            continue
+        for row in rows[1:]:
+            if not any(row):
+                continue
+            row_map = {headers[i]: row[i] if i < len(row) else "" for i in range(len(headers))}
+            item = {"Brand": "", "Product Details": "", "Size": "", "Finish": "", "Qty": 1, "Rate Per Piece": 0.0}
+            for k, v in row_map.items():
+                if "brand" in k:
+                    item["Brand"] = v
+                elif "product" in k or "description" in k or "details" in k:
+                    item["Product Details"] = v
+                elif "size" in k:
+                    item["Size"] = v
+                elif "finish" in k or "material" in k:
+                    item["Finish"] = v
+                elif "qty" in k or "quantity" in k:
+                    try: item["Qty"] = float(str(v).replace(",", "") or 0)
+                    except Exception: item["Qty"] = 0
+                elif "rate" in k or "price" in k:
+                    try: item["Rate Per Piece"] = float(str(v).replace(",", "").replace("€","").replace("$","").replace("AED","") or 0)
+                    except Exception: item["Rate Per Piece"] = 0.0
+            if item["Brand"] or item["Product Details"] or item["Size"] or item["Finish"]:
+                products.append(item)
+
+    if not products:
+        products = [{"Brand": "", "Product Details": full_text[:1200], "Size": "", "Finish": "", "Qty": 1, "Rate Per Piece": 0.0}]
+
+    return {
+        "id": str(uuid.uuid4()),
+        "type": "Proforma Invoice",
+        "number": "",
+        "date": str(date.today()),
+        "currency": "EUR",
+        "bill_to": {"Company Name": "", "Registration Number": "", "GST/VAT": "", "Contact Person": "", "Phone": "", "Email": "", "Country": "", "Address": ""},
+        "ship_same": True,
+        "ship_to": {},
+        "products": products,
+        "discount_type": "Percentage",
+        "discount_value": 0.0,
+        "shipping_enabled": False,
+        "shipping_cost": 0.0,
+        "terms": existing_terms or "",
+        "packing": [],
+        "packing_summary": {"Total Boxes": 0, "Total CBM": 0.0, "Total GW": 0.0, "Total NW": 0.0},
+        "total": 0.0,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
 def amount_in_words(amount, currency):
     amount = round(float(amount or 0), 2)
     whole = int(amount)
@@ -324,13 +357,12 @@ def build_excel(docdata):
     buffer = BytesIO()
     products = docdata.get("products", [])
     packing = packing_from_products(products, docdata.get("packing", []))
-    subtotal, disc, shipc, vat_amount, total = calculate(
+    subtotal, disc, shipc, total = calculate(
         products,
         docdata.get("discount_type", "Percentage"),
         docdata.get("discount_value", 0),
         docdata.get("shipping_enabled", False),
         docdata.get("shipping_cost", 0),
-        docdata.get("vat_mode", "VAT 5%"),
     )
 
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -339,10 +371,7 @@ def build_excel(docdata):
             ["Document No", docdata.get("number", "")],
             ["Date", docdata.get("date", "")],
             ["Currency", docdata.get("currency", "")],
-            ["Seller VAT / TRN", COMPANY["trn"].replace("TRN: ", "")],
             ["Customer", docdata.get("bill_to", {}).get("Company Name", "")],
-            ["VAT Treatment", docdata.get("vat_mode", "VAT 5%")],
-            ["VAT Amount", vat_amount],
             ["Grand Total", total],
         ]
         pd.DataFrame(info_rows, columns=["Field", "Value"]).to_excel(writer, sheet_name="Document Info", index=False)
@@ -368,7 +397,6 @@ def build_excel(docdata):
             {"Description": "Subtotal", "Amount": subtotal},
             {"Description": "Discount", "Amount": disc},
             {"Description": "Shipping", "Amount": shipc},
-            {"Description": "VAT 5%" if docdata.get("vat_mode", "VAT 5%") == "VAT 5%" else "OUT OF SCOPE OF VAT", "Amount": vat_amount},
             {"Description": "Grand Total", "Amount": total},
         ]
         pd.DataFrame(total_rows).to_excel(writer, sheet_name="Totals", index=False)
@@ -407,13 +435,12 @@ def build_word(docdata):
     buffer = BytesIO()
     products = docdata.get("products", [])
     packing = packing_from_products(products, docdata.get("packing", []))
-    subtotal, disc, shipc, vat_amount, total = calculate(
+    subtotal, disc, shipc, total = calculate(
         products,
         docdata.get("discount_type", "Percentage"),
         docdata.get("discount_value", 0),
         docdata.get("shipping_enabled", False),
         docdata.get("shipping_cost", 0),
-        docdata.get("vat_mode", "VAT 5%"),
     )
 
     document = Document()
@@ -439,7 +466,7 @@ def build_word(docdata):
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.add_run(f"No: {docdata.get('number','')} | Date: {docdata.get('date','')} | Currency: {docdata.get('currency','')}").bold = True
 
-    document.add_paragraph(f"{COMPANY['name']}\n{COMPANY['address']}\n{COMPANY['license']}\n{COMPANY['trn']}\n{COMPANY['phone']}\n{COMPANY['email']}")
+    document.add_paragraph(f"{COMPANY['name']}\n{COMPANY['address']}\n{COMPANY['license']}\n{COMPANY['phone']}\n{COMPANY['email']}")
 
     bill = docdata.get("bill_to", {})
     ship = docdata.get("ship_to", {})
@@ -447,9 +474,14 @@ def build_word(docdata):
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.style = "Table Grid"
     table.cell(0,0).text = "BILL TO\n" + "\n".join([
-        bill.get("Company Name",""), bill.get("Registration Number",""), bill.get("GST/VAT",""),
-        bill.get("Contact Person",""), bill.get("Phone",""), bill.get("Email",""),
-        bill.get("Address",""), bill.get("Country","")
+        bill.get("Company Name",""),
+        "Registration No: " + bill.get("Registration Number",""),
+        "VAT/GST No: " + bill.get("GST/VAT",""),
+        "Contact: " + bill.get("Contact Person",""),
+        "Phone: " + bill.get("Phone",""),
+        "Email: " + bill.get("Email",""),
+        bill.get("Address",""),
+        bill.get("Country","")
     ])
     table.cell(0,1).text = "SHIP TO\n" + ("Same as Bill To" if docdata.get("ship_same") else "\n".join([
         ship.get("Company Name",""), ship.get("Contact Person",""), ship.get("Phone",""),
@@ -471,13 +503,12 @@ def build_word(docdata):
             row[i].text = str(v)
 
     document.add_paragraph("")
-    totals_table = document.add_table(rows=5, cols=2)
+    totals_table = document.add_table(rows=4, cols=2)
     totals_table.style = "Table Grid"
     rows = [
         ("Subtotal", money(subtotal, docdata.get("currency","EUR"))),
         ("Discount", f"- {money(disc, docdata.get('currency','EUR'))}"),
         ("Shipping", money(shipc, docdata.get("currency","EUR"))),
-        ("VAT 5%" if docdata.get("vat_mode", "VAT 5%") == "VAT 5%" else "OUT OF SCOPE OF VAT", money(vat_amount, docdata.get("currency","EUR")) if docdata.get("vat_mode", "VAT 5%") == "VAT 5%" else "0.00"),
         ("Grand Total", money(total, docdata.get("currency","EUR"))),
     ]
     for i, (label, val) in enumerate(rows):
@@ -513,7 +544,7 @@ def build_word(docdata):
     sig.style = "Table Grid"
     sig.cell(0,0).text = "Seller Signature"
     sig.cell(0,1).text = "Buyer Signature"
-    sig.cell(1,0).text = "HARSH TEJPAL RANA\nOWNER\nARTE DI CASA - F.Z.E"
+    sig.cell(1,0).text = "HARSH TEJPAL RANA\nOWNER\nCASA ARTE PRIVEE FZ-LLC"
     sig.cell(1,1).text = "Name:\nCompany:\nDate:"
     if STAMP_PATH.exists():
         p = document.add_paragraph()
@@ -559,22 +590,30 @@ def build_pdf(docdata):
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="Small", parent=styles["Normal"], fontSize=7.5, leading=9))
     styles.add(ParagraphStyle(name="Tiny", parent=styles["Normal"], fontSize=6.8, leading=8))
-    styles.add(ParagraphStyle(name="TitleGold", parent=styles["Title"], fontSize=18, textColor=colors.HexColor("#5b9bd5"), leading=21))
-    styles.add(ParagraphStyle(name="Navy", parent=styles["Heading2"], fontSize=11, textColor=colors.HexColor("#2f80c4"), leading=13))
+    styles.add(ParagraphStyle(name="TitleGold", parent=styles["Title"], fontSize=18, textColor=colors.HexColor("#9b763c"), leading=21))
+    styles.add(ParagraphStyle(name="Navy", parent=styles["Heading2"], fontSize=11, textColor=colors.HexColor("#071c2e"), leading=13))
     story = []
 
     story.append(Paragraph(docdata["type"].upper(), styles["TitleGold"]))
     story.append(Paragraph(f"No: {docdata['number']} &nbsp;&nbsp; Date: {docdata['date']} &nbsp;&nbsp; Currency: {docdata['currency']}", styles["Small"]))
-    story.append(Paragraph(f"<b>SELLER VAT / TRN:</b> {COMPANY['trn'].replace('TRN: ', '')}", styles["Navy"]))
-    story.append(Paragraph(f"{COMPANY['address']}<br/>{COMPANY['license']}<br/>{COMPANY['trn']}<br/>{COMPANY['phone']}<br/>{COMPANY['email']}", styles["Small"]))
+    story.append(Paragraph(f"{COMPANY['address']}<br/>{COMPANY['license']}<br/>{COMPANY['phone']}<br/>{COMPANY['email']}", styles["Small"]))
     story.append(Spacer(1,5))
 
     bill = docdata.get("bill_to",{})
     ship = docdata.get("ship_to",{})
-    bill_text = "<br/>".join([f"<b>{bill.get('Company Name','')}</b>", bill.get("Registration Number",""), bill.get("GST/VAT",""), bill.get("Contact Person",""), bill.get("Phone",""), bill.get("Email",""), bill.get("Address",""), bill.get("Country","")])
+    bill_text = "<br/>".join([
+        f"<b>{bill.get('Company Name','')}</b>",
+        f"Registration No: {bill.get('Registration Number','')}",
+        f"VAT/GST No: {bill.get('GST/VAT','')}",
+        f"Contact: {bill.get('Contact Person','')}",
+        f"Phone: {bill.get('Phone','')}",
+        f"Email: {bill.get('Email','')}",
+        bill.get("Address",""),
+        bill.get("Country","")
+    ])
     ship_text = "Same as Bill To" if docdata.get("ship_same") else "<br/>".join([ship.get("Company Name",""), ship.get("Contact Person",""), ship.get("Phone",""), ship.get("Email",""), ship.get("Address",""), ship.get("Country","")])
     bt = Table([[Paragraph("<b>BILL TO</b><br/>"+bill_text, styles["Small"]), Paragraph("<b>SHIP TO</b><br/>"+ship_text, styles["Small"])]], colWidths=[86*mm,86*mm])
-    bt.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#9bc2e6")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#f3f9ff")),("VALIGN",(0,0),(-1,-1),"TOP")]))
+    bt.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#c9b083")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#faf7f1")),("VALIGN",(0,0),(-1,-1),"TOP")]))
     story.append(bt); story.append(Spacer(1,6))
 
     rows = [["SL","Brand","Product Details","Size","Finish","Qty","Rate/PC","Amount"]]
@@ -582,13 +621,13 @@ def build_pdf(docdata):
         qty=float(p.get("Qty",0) or 0); rate=float(p.get("Rate Per Piece",0) or 0)
         rows.append([i, p.get("Brand",""), Paragraph(p.get("Product Details",""), styles["Tiny"]), p.get("Size",""), Paragraph(p.get("Finish",""), styles["Tiny"]), qty, money(rate, docdata["currency"]), money(qty*rate, docdata["currency"])])
     t = Table(rows, repeatRows=1, colWidths=[8*mm,24*mm,43*mm,25*mm,34*mm,10*mm,23*mm,24*mm])
-    t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2f80c4")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),0.25,colors.lightgrey),("FONTSIZE",(0,0),(-1,-1),6.8),("VALIGN",(0,0),(-1,-1),"TOP")]))
+    t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#071c2e")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),0.25,colors.lightgrey),("FONTSIZE",(0,0),(-1,-1),6.8),("VALIGN",(0,0),(-1,-1),"TOP")]))
     story.append(t); story.append(Spacer(1,6))
 
-    subtotal, disc, shipc, vat_amount, total = calculate(docdata["products"], docdata["discount_type"], docdata["discount_value"], docdata["shipping_enabled"], docdata["shipping_cost"], docdata.get("vat_mode", "VAT 5%"))
-    totals = [["Subtotal", money(subtotal, docdata["currency"])],["Discount", f"- {money(disc, docdata['currency'])}"],["Shipping", money(shipc, docdata["currency"])],["VAT 5%" if docdata.get("vat_mode", "VAT 5%") == "VAT 5%" else "OUT OF SCOPE OF VAT", money(vat_amount, docdata["currency"]) if docdata.get("vat_mode", "VAT 5%") == "VAT 5%" else "0.00"],["Grand Total", money(total, docdata["currency"])]]
+    subtotal, disc, shipc, total = calculate(docdata["products"], docdata["discount_type"], docdata["discount_value"], docdata["shipping_enabled"], docdata["shipping_cost"])
+    totals = [["Subtotal", money(subtotal, docdata["currency"])],["Discount", f"- {money(disc, docdata['currency'])}"],["Shipping", money(shipc, docdata["currency"])],["Grand Total", money(total, docdata["currency"])]]
     tt = Table(totals, colWidths=[40*mm,38*mm], hAlign="RIGHT")
-    tt.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.25,colors.grey),("BACKGROUND",(0,4),(-1,4),colors.HexColor("#2f80c4")),("TEXTCOLOR",(0,4),(-1,4),colors.white),("FONTNAME",(0,4),(-1,4),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8)]))
+    tt.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.25,colors.grey),("BACKGROUND",(0,3),(-1,3),colors.HexColor("#071c2e")),("TEXTCOLOR",(0,3),(-1,3),colors.white),("FONTNAME",(0,3),(-1,3),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8)]))
     story.append(tt); story.append(Spacer(1,5))
     story.append(Paragraph(f"<b>Amount in Words:</b> {amount_in_words(total, docdata['currency'])}", styles["Navy"]))
     story.append(Spacer(1,7))
@@ -598,7 +637,7 @@ def build_pdf(docdata):
     for b in BANKS[docdata["currency"]]:
         bank_rows.append([b["Bank Name"], b["Currency"], b["IBAN"], b["SWIFT/BIC"], Paragraph(b["Bank Address"], styles["Tiny"])])
     bank_table = Table(bank_rows, repeatRows=1, colWidths=[38*mm,16*mm,45*mm,25*mm,55*mm])
-    bank_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#5b9bd5")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.grey),("FONTSIZE",(0,0),(-1,-1),6.8),("VALIGN",(0,0),(-1,-1),"TOP")]))
+    bank_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#9b763c")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.grey),("FONTSIZE",(0,0),(-1,-1),6.8),("VALIGN",(0,0),(-1,-1),"TOP")]))
     story.append(bank_table)
 
     story.append(PageBreak())
@@ -612,9 +651,9 @@ def build_pdf(docdata):
     sig = [["Seller Signature", "Buyer Signature"]]
     if STAMP_PATH.exists():
         sig.append([Image(str(STAMP_PATH), width=28*mm, height=20*mm), ""])
-    sig.append(["HARSH TEJPAL RANA\nOWNER\nARTE DI CASA - F.Z.E", "Name:\nCompany:\nDate:"])
+    sig.append(["HARSH TEJPAL RANA\nOWNER\nCASA ARTE PRIVEE FZ-LLC", "Name:\nCompany:\nDate:"])
     sigt = Table(sig, colWidths=[85*mm,85*mm])
-    sigt.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.25,colors.grey),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#f3f9ff")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,0),(-1,-1),8)]))
+    sigt.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.25,colors.grey),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#faf7f1")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,0),(-1,-1),8)]))
     story.append(sigt)
 
     if docdata["type"] == "Invoice":
@@ -625,7 +664,7 @@ def build_pdf(docdata):
         for i,p in enumerate(pack, 1):
             prow.append([i,p.get("Box No", i),p.get("Part","1/1"),p["Brand"],Paragraph(p["Product Details"],styles["Tiny"]),p["Length"],p["Breadth"],p["Height"],p["CBM"],p["GW"],p["NW"]])
         pt = Table(prow, repeatRows=1, colWidths=[7*mm,13*mm,13*mm,24*mm,45*mm,13*mm,13*mm,13*mm,16*mm,16*mm,16*mm])
-        pt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2f80c4")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.lightgrey),("FONTSIZE",(0,0),(-1,-1),6.8),("VALIGN",(0,0),(-1,-1),"TOP")]))
+        pt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#071c2e")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.lightgrey),("FONTSIZE",(0,0),(-1,-1),6.8),("VALIGN",(0,0),(-1,-1),"TOP")]))
         story.append(pt); story.append(Spacer(1,8))
         summary = docdata.get("packing_summary") or packing_summary(pack)
         story.append(Paragraph(f"<b>Total Boxes:</b> {int(summary.get('Total Boxes', len(pack)))} &nbsp;&nbsp; <b>Total CBM:</b> {float(summary.get('Total CBM', 0)):.3f} &nbsp;&nbsp; <b>Total GW:</b> {float(summary.get('Total GW', 0)):.2f} KG &nbsp;&nbsp; <b>Total NW:</b> {float(summary.get('Total NW', 0)):.2f} KG", styles["Navy"]))
@@ -633,18 +672,18 @@ def build_pdf(docdata):
         story.append(Paragraph("Digital Signature / Authorized Signatory", styles["Navy"]))
         if STAMP_PATH.exists():
             story.append(Image(str(STAMP_PATH), width=30*mm, height=22*mm))
-        story.append(Paragraph("HARSH TEJPAL RANA<br/>MANAGER<br/>ARTE DI CASA - F.Z.E", styles["Small"]))
+        story.append(Paragraph("HARSH TEJPAL RANA<br/>OWNER<br/>CASA ARTE PRIVEE FZ-LLC", styles["Small"]))
 
     pdf.build(story, onFirstPage=lambda c,d: pdf_header_footer(c,d,docdata["type"]), onLaterPages=lambda c,d: pdf_header_footer(c,d,docdata["type"]))
     return buffer.getvalue()
 
 settings = load_json(SETTINGS_FILE, {"terms":"","password":"1985"})
-st.set_page_config(page_title="Arte Di Casa Billing", layout="wide")
+st.set_page_config(page_title="Casa Arte Privée Billing", layout="wide")
 
 # optional password, on by default
 if "auth" not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
-    st.markdown("<div style='background:#2f80c4;padding:38px;border-radius:22px;text-align:center;color:white;margin-top:80px;'><h1 style='color:#7db5e8;font-family:Georgia;'>ARTE DI CASA</h1><p style='letter-spacing:4px;'>BILLING SYSTEM LOGIN</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='background:#071c2e;padding:38px;border-radius:22px;text-align:center;color:white;margin-top:80px;'><h1 style='color:#d0aa65;font-family:Georgia;'>CASA ARTE PRIVÉE</h1><p style='letter-spacing:4px;'>BILLING SYSTEM LOGIN</p></div>", unsafe_allow_html=True)
     pw = st.text_input("Password", type="password")
     if st.button("Login"):
         if pw == str(settings.get("password","1985")):
@@ -660,20 +699,21 @@ st.markdown("""
 .block-container { max-width:1600px; padding-top:1rem; }
 div[data-testid="stButton"] button { font-size: 11px !important; padding: 0.25rem 0.35rem !important; min-height: 30px !important; }
 
-.cap { background:#2f80c4; color:white; padding:22px; border-radius:22px; margin-bottom:18px; box-shadow:0 12px 30px #0002; }
-.gold { color:#7db5e8; font-family:Georgia,serif; }
-.card { background:white; border:1px solid #d7e9fb; border-radius:18px; padding:16px; margin-bottom:16px; box-shadow:0 8px 24px #2f80c410; }
+.cap { background:#071c2e; color:white; padding:22px; border-radius:22px; margin-bottom:18px; box-shadow:0 12px 30px #0002; }
+.gold { color:#d0aa65; font-family:Georgia,serif; }
+.card { background:white; border:1px solid #eadfcd; border-radius:18px; padding:16px; margin-bottom:16px; box-shadow:0 8px 24px #071c2e10; }
 </style>
 """, unsafe_allow_html=True)
 
 logo = img_b64(LOGO_PATH)
 logo_html = f"<img src='data:image/png;base64,{logo}' style='height:78px;object-fit:contain;margin-right:18px;'>" if logo else ""
-st.markdown(f"<div class='cap' style='display:flex;align-items:center;'>{logo_html}<div><h1 class='gold' style='margin:0;font-size:34px;'>ARTE DI CASA</h1><div style='letter-spacing:5px;font-size:11px;'>BILLING · PROFORMA · INVOICE · PACKING LIST</div></div></div>", unsafe_allow_html=True)
+st.markdown(f"<div class='cap' style='display:flex;align-items:center;'>{logo_html}<div><h1 class='gold' style='margin:0;font-size:34px;'>CASA ARTE PRIVÉE</h1><div style='letter-spacing:5px;font-size:11px;'>BILLING · PROFORMA · INVOICE · PACKING LIST</div></div></div>", unsafe_allow_html=True)
 
 customers = load_json(CUSTOMERS_FILE, [])
 documents = load_json(DOCUMENTS_FILE, [])
 
 if "editing_id" not in st.session_state: st.session_state.editing_id = None
+if "imported_doc_buffer" not in st.session_state: st.session_state.imported_doc_buffer = None
 
 
 
@@ -706,10 +746,27 @@ st.caption(f"Current page: {st.session_state.page}")
 
 if st.session_state.page == "Create / Edit":
     editing = next((d for d in documents if d.get("id") == st.session_state.editing_id), None) if st.session_state.editing_id else None
+    if editing is None and st.session_state.get("imported_doc_buffer") and st.session_state.editing_id == st.session_state.imported_doc_buffer.get("id"):
+        editing = st.session_state.imported_doc_buffer
     if editing:
-        st.success(f"Editing existing document: {editing.get('number','')}. Saving will update the SAME document.")
+        st.success(f"Editing existing document: {editing.get('number') or 'Imported Word Draft'}. Saving will update the SAME document.")
     else:
         st.info("Creating a new document.")
+
+    st.markdown("<div class='card'><h3 class='gold'>Optional: Import Existing Word File</h3>", unsafe_allow_html=True)
+    uploaded_word = st.file_uploader("Upload existing Word file (.docx) to convert into editable draft", type=["docx"], key="word_import_upload")
+    if uploaded_word is not None:
+        if st.button("Import Word into Entry Page"):
+            imported = extract_docx_to_document(uploaded_word, settings.get("terms",""))
+            imported["number"] = next_number(imported["type"], documents)
+            st.session_state.imported_doc_buffer = imported
+            st.session_state.editing_id = imported["id"]
+            st.session_state.force_page = "Create / Edit"
+            st.success("Word file imported. Review/edit all fields before saving.")
+            st.rerun()
+    st.caption("Import extracts available text/tables. Please review all fields before saving or converting.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
     c1,c2,c3,c4 = st.columns(4)
     doc_type = c1.selectbox("Document Type", ["Proforma Invoice","Invoice"], index=1 if editing and editing.get("type")=="Invoice" else 0)
@@ -719,10 +776,6 @@ if st.session_state.page == "Create / Edit":
 
     if st.button("Start New Blank Document"):
         st.session_state.editing_id = None
-        st.session_state.pop("product_rows_new_document", None)
-        st.session_state.pop("packing_rows_new_document", None)
-        st.session_state.pop("active_product_doc_key", None)
-        st.session_state.pop("active_packing_doc_key", None)
         st.session_state.page = "Create / Edit"
         st.rerun()
 
@@ -735,7 +788,7 @@ if st.session_state.page == "Create / Edit":
     with a:
         bill_company = st.text_input("Company Name", value=bill_existing.get("Company Name",""))
         bill_reg = st.text_input("Company Registration Number", value=bill_existing.get("Registration Number",""))
-        bill_vat = st.text_input("GST / VAT", value=bill_existing.get("GST/VAT",""))
+        bill_vat = st.text_input("VAT / GST Number", value=bill_existing.get("GST/VAT",""))
         bill_contact = st.text_input("Contact Person", value=bill_existing.get("Contact Person",""))
     with b:
         bill_phone = st.text_input("Phone", value=bill_existing.get("Phone",""))
@@ -758,51 +811,52 @@ if st.session_state.page == "Create / Edit":
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='card'><h3 class='gold'>Products</h3>", unsafe_allow_html=True)
-    current_product_doc_key = editing.get("id") if editing else "new_document"
-    product_state_key = f"product_rows_{current_product_doc_key}"
 
-    if st.session_state.get("active_product_doc_key") != current_product_doc_key:
+    product_state_key = f"product_rows_{editing.get('id') if editing else 'new'}"
+    active_key = editing.get("id") if editing else "new"
+    if st.session_state.get("active_product_doc_key") != active_key:
         init_products = editing.get("products") if editing else [{"Brand":"","Product Details":"","Size":"","Finish":"","Qty":1,"Rate Per Piece":0.0}]
-        st.session_state[product_state_key] = prepare_product_rows(init_products)
-        st.session_state["active_product_doc_key"] = current_product_doc_key
+        st.session_state[product_state_key] = init_products
+        st.session_state["active_product_doc_key"] = active_key
 
     if product_state_key not in st.session_state:
-        st.session_state[product_state_key] = prepare_product_rows([])
+        st.session_state[product_state_key] = [{"Brand":"","Product Details":"","Size":"","Finish":"","Qty":1,"Rate Per Piece":0.0}]
 
-    st.caption("Delete any product row with X. Serial numbers in invoice/PDF/packing list will automatically move up.")
-    prod_headers = st.columns([0.6, 1.4, 3.2, 1.5, 1.5, 0.9, 1.2, 0.7])
-    for col, label in zip(prod_headers, ["SL", "Brand", "Product Details", "Size", "Finish", "Qty", "Rate/PC", "Del"]):
-        col.markdown(f"**{label}**")
+    dc1, dc2, dc3 = st.columns([1, 1, 4])
+    with dc1:
+        delete_row_no = st.number_input("Delete Product Row No.", min_value=1, value=1, step=1)
+    with dc2:
+        st.write("")
+        st.write("")
+        if st.button("Delete Product Row"):
+            current_products = list(st.session_state[product_state_key])
+            idx_to_delete = int(delete_row_no) - 1
+            if 0 <= idx_to_delete < len(current_products):
+                current_products.pop(idx_to_delete)
+                if not current_products:
+                    current_products = [{"Brand":"","Product Details":"","Size":"","Finish":"","Qty":1,"Rate Per Piece":0.0}]
+                st.session_state[product_state_key] = current_products
+                st.success(f"Deleted product row {delete_row_no}. Serial numbers will move up automatically.")
+                st.rerun()
+            else:
+                st.warning("Row number not found.")
 
-    product_rows = []
-    delete_product_index = None
-    for idx, row in enumerate(prepare_product_rows(st.session_state[product_state_key])):
-        rid = row.get("_row_id", product_row_id())
-        c = st.columns([0.6, 1.4, 3.2, 1.5, 1.5, 0.9, 1.2, 0.7])
-        c[0].write(idx + 1)
-        brand = c[1].text_input("Brand", value=str(row.get("Brand", "")), key=f"prod_brand_{rid}", label_visibility="collapsed")
-        details = c[2].text_input("Product Details", value=str(row.get("Product Details", "")), key=f"prod_details_{rid}", label_visibility="collapsed")
-        size = c[3].text_input("Size", value=str(row.get("Size", "")), key=f"prod_size_{rid}", label_visibility="collapsed")
-        finish = c[4].text_input("Finish", value=str(row.get("Finish", "")), key=f"prod_finish_{rid}", label_visibility="collapsed")
-        qty = c[5].number_input("Qty", min_value=0.0, value=float(row.get("Qty", 0) or 0), step=1.0, key=f"prod_qty_{rid}", label_visibility="collapsed")
-        rate = c[6].number_input("Rate", min_value=0.0, value=float(row.get("Rate Per Piece", 0) or 0), step=1.0, key=f"prod_rate_{rid}", label_visibility="collapsed")
-        if c[7].button("X", key=f"prod_delete_{rid}"):
-            delete_product_index = idx
-        product_rows.append({"_row_id": rid, "Brand": brand, "Product Details": details, "Size": size, "Finish": finish, "Qty": float(qty or 0), "Rate Per Piece": float(rate or 0)})
+    product_df = pd.DataFrame(st.session_state[product_state_key])
+    for col in PRODUCT_COLS:
+        if col not in product_df.columns:
+            product_df[col] = 0 if col in ["Qty","Rate Per Piece"] else ""
 
-    if delete_product_index is not None:
-        product_rows.pop(delete_product_index)
-        st.session_state[product_state_key] = prepare_product_rows(product_rows)
-        st.rerun()
-
-    add_cols = st.columns([1, 5])
-    if add_cols[0].button("Add Product Row", key=f"add_product_{current_product_doc_key}"):
-        product_rows.append({"_row_id": product_row_id(), "Brand":"", "Product Details":"", "Size":"", "Finish":"", "Qty":1.0, "Rate Per Piece":0.0})
-        st.session_state[product_state_key] = prepare_product_rows(product_rows)
-        st.rerun()
-
-    st.session_state[product_state_key] = prepare_product_rows(product_rows)
-    products = strip_product_rows(st.session_state[product_state_key])
+    edited_df = st.data_editor(product_df[PRODUCT_COLS], num_rows="dynamic", use_container_width=True, key=f"prod_{st.session_state.editing_id or 'new'}")
+    raw_products = edited_df.fillna("").to_dict("records")
+    products = []
+    for p in raw_products:
+        if not str(p.get("Brand","")).strip() and not str(p.get("Product Details","")).strip() and not str(p.get("Size","")).strip() and not str(p.get("Finish","")).strip() and float(p.get("Qty",0) or 0) == 0 and float(p.get("Rate Per Piece",0) or 0) == 0:
+            continue
+        products.append(p)
+    if not products:
+        products = [{"Brand":"","Product Details":"","Size":"","Finish":"","Qty":1,"Rate Per Piece":0.0}]
+    st.session_state[product_state_key] = products
+    st.caption("Serial numbers are automatic in PDF/Word. Delete any row and following rows move up.")
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='card'><h3 class='gold'>Discount / Shipping / Totals</h3>", unsafe_allow_html=True)
@@ -811,15 +865,12 @@ if st.session_state.page == "Create / Edit":
     discount_value = d2.number_input("Discount Value", min_value=0.0, value=float(editing.get("discount_value",0) if editing else 0))
     shipping_enabled = d3.checkbox("Add Shipping Charges?", value=bool(editing.get("shipping_enabled", False)) if editing else False)
     shipping_cost = d4.number_input("Shipping Cost", min_value=0.0, value=float(editing.get("shipping_cost",0) if editing else 0), disabled=not shipping_enabled, help="Tick Add Shipping Charges first, then enter shipping amount.")
-    vat_mode = st.selectbox("VAT Treatment", ["VAT 5%", "OUT OF SCOPE OF VAT"], index=["VAT 5%", "OUT OF SCOPE OF VAT"].index(editing.get("vat_mode", "VAT 5%")) if editing and editing.get("vat_mode") in ["VAT 5%", "OUT OF SCOPE OF VAT"] else 0, help="Use VAT 5% for UAE standard-rated supplies. Use OUT OF SCOPE OF VAT only when your accountant confirms it applies.")
-    subtotal, discount_amount, shipping_amount, vat_amount, grand = calculate(products, discount_type, discount_value, shipping_enabled, shipping_cost, vat_mode)
-    m1,m2,m3,m4,m5 = st.columns(5)
+    subtotal, discount_amount, shipping_amount, grand = calculate(products, discount_type, discount_value, shipping_enabled, shipping_cost)
+    m1,m2,m3,m4 = st.columns(4)
     m1.metric("Subtotal", money(subtotal, currency))
     m2.metric("Discount", money(discount_amount, currency))
     m3.metric("Shipping", money(shipping_amount, currency))
-    m4.metric("VAT", money(vat_amount, currency) if vat_mode == "VAT 5%" else "OUT OF SCOPE")
-    m5.metric("Grand Total", money(grand, currency))
-    st.info(f"Seller VAT / TRN: {COMPANY['trn'].replace('TRN: ', '')}")
+    m4.metric("Grand Total", money(grand, currency))
     st.info(f"Amount in Words: {amount_in_words(grand, currency)}")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -851,14 +902,8 @@ if st.session_state.page == "Create / Edit":
             saved_packing = editing.get("packing", []) if editing else []
             st.session_state[packing_state_key] = clean_packing_rows(packing_from_products(products, saved_packing))
 
-        # Keep packing list aligned with current products. If a product row is deleted,
-        # its packing rows are removed and all box numbers move up automatically.
-        valid_pairs = {
-            (p.get("Brand", ""), p.get("Product Details", ""))
-            for p in products
-            if str(p.get("Brand", "")).strip() or str(p.get("Product Details", "")).strip()
-        }
-        rows = [r for r in clean_packing_rows(st.session_state[packing_state_key]) if (r.get("Brand", ""), r.get("Product Details", "")) in valid_pairs]
+        # Add missing product rows without removing split rows.
+        rows = clean_packing_rows(st.session_state[packing_state_key])
         existing_pairs = {(r.get("Brand", ""), r.get("Product Details", "")) for r in rows}
         for p in products:
             if not str(p.get("Brand", "")).strip() and not str(p.get("Product Details", "")).strip():
@@ -901,9 +946,9 @@ if st.session_state.page == "Create / Edit":
                 if product_labels:
                     original_index = int(split_choice.split(".")[0]) - 1
                     p = products[original_index]
-                    current_rows = clean_packing_rows(st.session_state[packing_state_key])
-                    new_split_row = {
-                        "Box No": 0,
+                    rows_now = clean_packing_rows(st.session_state[packing_state_key])
+                    new_pack_row = {
+                        "Box No": len(rows_now) + 1,
                         "Part": part_label or "Part",
                         "Brand": p.get("Brand", ""),
                         "Product Details": p.get("Product Details", ""),
@@ -914,12 +959,12 @@ if st.session_state.page == "Create / Edit":
                         "GW": 0.0,
                         "NW": 0.0,
                     }
-                    insert_at = len(current_rows)
-                    for r_idx, existing_row in enumerate(current_rows):
-                        if existing_row.get("Brand", "") == p.get("Brand", "") and existing_row.get("Product Details", "") == p.get("Product Details", ""):
-                            insert_at = r_idx + 1
-                    current_rows.insert(insert_at, new_split_row)
-                    st.session_state[packing_state_key] = clean_packing_rows(current_rows)
+                    insert_at = len(rows_now)
+                    for r_i, r in enumerate(rows_now):
+                        if r.get("Brand","") == p.get("Brand","") and r.get("Product Details","") == p.get("Product Details",""):
+                            insert_at = r_i + 1
+                    rows_now.insert(insert_at, new_pack_row)
+                    st.session_state[packing_state_key] = clean_packing_rows(rows_now)
                     st.rerun()
 
         st.markdown("#### Packing Rows")
@@ -1014,7 +1059,6 @@ if st.session_state.page == "Create / Edit":
         "bill_to": bill_to, "ship_same": ship_same, "ship_to": ship_to,
         "products": products, "discount_type": discount_type, "discount_value": discount_value,
         "shipping_enabled": shipping_enabled, "shipping_cost": shipping_cost,
-        "vat_mode": vat_mode, "vat_rate": VAT_RATE, "vat_amount": vat_amount,
         "terms": terms, "packing": packing, "packing_summary": packing_summary_values, "total": grand,
         "created_at": editing.get("created_at") if editing else datetime.now().isoformat(timespec="seconds"),
         "updated_at": datetime.now().isoformat(timespec="seconds")
@@ -1048,6 +1092,7 @@ if st.session_state.page == "Create / Edit":
 
         # After save/update, return to Saved Documents list.
         st.session_state.editing_id = None
+        st.session_state.imported_doc_buffer = None
         st.session_state.force_page = "Saved Documents"
         st.success(f"Saved / Updated: {docdata['number']}")
         st.rerun()
