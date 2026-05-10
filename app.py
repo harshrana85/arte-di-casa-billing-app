@@ -53,6 +53,33 @@ BANKS = {
 PRODUCT_COLS = ["Brand","Product Details","Size","Finish","Qty","Rate Per Piece"]
 PACK_COLS = ["Box No","Part","Brand","Product Details","Length","Breadth","Height","CBM","GW","NW"]
 
+
+def product_row_id():
+    return str(uuid.uuid4())
+
+
+def prepare_product_rows(rows):
+    prepared = []
+    for row in rows or []:
+        new_row = dict(row)
+        new_row.setdefault("_row_id", product_row_id())
+        for col in PRODUCT_COLS:
+            if col not in new_row:
+                new_row[col] = 0.0 if col in ["Qty", "Rate Per Piece"] else ""
+        prepared.append(new_row)
+    if not prepared:
+        prepared.append({"_row_id": product_row_id(), "Brand":"", "Product Details":"", "Size":"", "Finish":"", "Qty":1.0, "Rate Per Piece":0.0})
+    return prepared
+
+
+def strip_product_rows(rows):
+    cleaned = []
+    for row in rows or []:
+        item = {col: row.get(col, 0.0 if col in ["Qty", "Rate Per Piece"] else "") for col in PRODUCT_COLS}
+        if str(item.get("Brand", "")).strip() or str(item.get("Product Details", "")).strip() or float(item.get("Qty", 0) or 0) or float(item.get("Rate Per Piece", 0) or 0):
+            cleaned.append(item)
+    return cleaned
+
 def load_json(path, default):
     if not path.exists():
         path.write_text(json.dumps(default, indent=2))
@@ -312,6 +339,7 @@ def build_excel(docdata):
             ["Document No", docdata.get("number", "")],
             ["Date", docdata.get("date", "")],
             ["Currency", docdata.get("currency", "")],
+            ["Seller VAT / TRN", COMPANY["trn"].replace("TRN: ", "")],
             ["Customer", docdata.get("bill_to", {}).get("Company Name", "")],
             ["VAT Treatment", docdata.get("vat_mode", "VAT 5%")],
             ["VAT Amount", vat_amount],
@@ -537,6 +565,7 @@ def build_pdf(docdata):
 
     story.append(Paragraph(docdata["type"].upper(), styles["TitleGold"]))
     story.append(Paragraph(f"No: {docdata['number']} &nbsp;&nbsp; Date: {docdata['date']} &nbsp;&nbsp; Currency: {docdata['currency']}", styles["Small"]))
+    story.append(Paragraph(f"<b>SELLER VAT / TRN:</b> {COMPANY['trn'].replace('TRN: ', '')}", styles["Navy"]))
     story.append(Paragraph(f"{COMPANY['address']}<br/>{COMPANY['license']}<br/>{COMPANY['trn']}<br/>{COMPANY['phone']}<br/>{COMPANY['email']}", styles["Small"]))
     story.append(Spacer(1,5))
 
@@ -690,6 +719,10 @@ if st.session_state.page == "Create / Edit":
 
     if st.button("Start New Blank Document"):
         st.session_state.editing_id = None
+        st.session_state.pop("product_rows_new_document", None)
+        st.session_state.pop("packing_rows_new_document", None)
+        st.session_state.pop("active_product_doc_key", None)
+        st.session_state.pop("active_packing_doc_key", None)
         st.session_state.page = "Create / Edit"
         st.rerun()
 
@@ -725,12 +758,51 @@ if st.session_state.page == "Create / Edit":
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='card'><h3 class='gold'>Products</h3>", unsafe_allow_html=True)
-    init_products = editing.get("products") if editing else [{"Brand":"","Product Details":"","Size":"","Finish":"","Qty":1,"Rate Per Piece":0.0}]
-    pdf = pd.DataFrame(init_products)
-    for col in PRODUCT_COLS:
-        if col not in pdf.columns: pdf[col] = 0 if col in ["Qty","Rate Per Piece"] else ""
-    edited_df = st.data_editor(pdf[PRODUCT_COLS], num_rows="dynamic", use_container_width=True, key=f"prod_{st.session_state.editing_id or 'new'}")
-    products = edited_df.fillna("").to_dict("records")
+    current_product_doc_key = editing.get("id") if editing else "new_document"
+    product_state_key = f"product_rows_{current_product_doc_key}"
+
+    if st.session_state.get("active_product_doc_key") != current_product_doc_key:
+        init_products = editing.get("products") if editing else [{"Brand":"","Product Details":"","Size":"","Finish":"","Qty":1,"Rate Per Piece":0.0}]
+        st.session_state[product_state_key] = prepare_product_rows(init_products)
+        st.session_state["active_product_doc_key"] = current_product_doc_key
+
+    if product_state_key not in st.session_state:
+        st.session_state[product_state_key] = prepare_product_rows([])
+
+    st.caption("Delete any product row with X. Serial numbers in invoice/PDF/packing list will automatically move up.")
+    prod_headers = st.columns([0.6, 1.4, 3.2, 1.5, 1.5, 0.9, 1.2, 0.7])
+    for col, label in zip(prod_headers, ["SL", "Brand", "Product Details", "Size", "Finish", "Qty", "Rate/PC", "Del"]):
+        col.markdown(f"**{label}**")
+
+    product_rows = []
+    delete_product_index = None
+    for idx, row in enumerate(prepare_product_rows(st.session_state[product_state_key])):
+        rid = row.get("_row_id", product_row_id())
+        c = st.columns([0.6, 1.4, 3.2, 1.5, 1.5, 0.9, 1.2, 0.7])
+        c[0].write(idx + 1)
+        brand = c[1].text_input("Brand", value=str(row.get("Brand", "")), key=f"prod_brand_{rid}", label_visibility="collapsed")
+        details = c[2].text_input("Product Details", value=str(row.get("Product Details", "")), key=f"prod_details_{rid}", label_visibility="collapsed")
+        size = c[3].text_input("Size", value=str(row.get("Size", "")), key=f"prod_size_{rid}", label_visibility="collapsed")
+        finish = c[4].text_input("Finish", value=str(row.get("Finish", "")), key=f"prod_finish_{rid}", label_visibility="collapsed")
+        qty = c[5].number_input("Qty", min_value=0.0, value=float(row.get("Qty", 0) or 0), step=1.0, key=f"prod_qty_{rid}", label_visibility="collapsed")
+        rate = c[6].number_input("Rate", min_value=0.0, value=float(row.get("Rate Per Piece", 0) or 0), step=1.0, key=f"prod_rate_{rid}", label_visibility="collapsed")
+        if c[7].button("X", key=f"prod_delete_{rid}"):
+            delete_product_index = idx
+        product_rows.append({"_row_id": rid, "Brand": brand, "Product Details": details, "Size": size, "Finish": finish, "Qty": float(qty or 0), "Rate Per Piece": float(rate or 0)})
+
+    if delete_product_index is not None:
+        product_rows.pop(delete_product_index)
+        st.session_state[product_state_key] = prepare_product_rows(product_rows)
+        st.rerun()
+
+    add_cols = st.columns([1, 5])
+    if add_cols[0].button("Add Product Row", key=f"add_product_{current_product_doc_key}"):
+        product_rows.append({"_row_id": product_row_id(), "Brand":"", "Product Details":"", "Size":"", "Finish":"", "Qty":1.0, "Rate Per Piece":0.0})
+        st.session_state[product_state_key] = prepare_product_rows(product_rows)
+        st.rerun()
+
+    st.session_state[product_state_key] = prepare_product_rows(product_rows)
+    products = strip_product_rows(st.session_state[product_state_key])
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='card'><h3 class='gold'>Discount / Shipping / Totals</h3>", unsafe_allow_html=True)
@@ -747,6 +819,7 @@ if st.session_state.page == "Create / Edit":
     m3.metric("Shipping", money(shipping_amount, currency))
     m4.metric("VAT", money(vat_amount, currency) if vat_mode == "VAT 5%" else "OUT OF SCOPE")
     m5.metric("Grand Total", money(grand, currency))
+    st.info(f"Seller VAT / TRN: {COMPANY['trn'].replace('TRN: ', '')}")
     st.info(f"Amount in Words: {amount_in_words(grand, currency)}")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -778,8 +851,14 @@ if st.session_state.page == "Create / Edit":
             saved_packing = editing.get("packing", []) if editing else []
             st.session_state[packing_state_key] = clean_packing_rows(packing_from_products(products, saved_packing))
 
-        # Add missing product rows without removing split rows.
-        rows = clean_packing_rows(st.session_state[packing_state_key])
+        # Keep packing list aligned with current products. If a product row is deleted,
+        # its packing rows are removed and all box numbers move up automatically.
+        valid_pairs = {
+            (p.get("Brand", ""), p.get("Product Details", ""))
+            for p in products
+            if str(p.get("Brand", "")).strip() or str(p.get("Product Details", "")).strip()
+        }
+        rows = [r for r in clean_packing_rows(st.session_state[packing_state_key]) if (r.get("Brand", ""), r.get("Product Details", "")) in valid_pairs]
         existing_pairs = {(r.get("Brand", ""), r.get("Product Details", "")) for r in rows}
         for p in products:
             if not str(p.get("Brand", "")).strip() and not str(p.get("Product Details", "")).strip():
@@ -822,8 +901,9 @@ if st.session_state.page == "Create / Edit":
                 if product_labels:
                     original_index = int(split_choice.split(".")[0]) - 1
                     p = products[original_index]
-                    st.session_state[packing_state_key].append({
-                        "Box No": len(clean_packing_rows(st.session_state[packing_state_key])) + 1,
+                    current_rows = clean_packing_rows(st.session_state[packing_state_key])
+                    new_split_row = {
+                        "Box No": 0,
                         "Part": part_label or "Part",
                         "Brand": p.get("Brand", ""),
                         "Product Details": p.get("Product Details", ""),
@@ -833,8 +913,13 @@ if st.session_state.page == "Create / Edit":
                         "CBM": 0.0,
                         "GW": 0.0,
                         "NW": 0.0,
-                    })
-                    st.session_state[packing_state_key] = clean_packing_rows(st.session_state[packing_state_key])
+                    }
+                    insert_at = len(current_rows)
+                    for r_idx, existing_row in enumerate(current_rows):
+                        if existing_row.get("Brand", "") == p.get("Brand", "") and existing_row.get("Product Details", "") == p.get("Product Details", ""):
+                            insert_at = r_idx + 1
+                    current_rows.insert(insert_at, new_split_row)
+                    st.session_state[packing_state_key] = clean_packing_rows(current_rows)
                     st.rerun()
 
         st.markdown("#### Packing Rows")
