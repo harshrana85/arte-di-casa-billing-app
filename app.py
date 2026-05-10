@@ -1187,8 +1187,8 @@ if st.session_state.page == "Create / Edit":
                     st.rerun()
 
         st.markdown("#### Packing Rows")
-        header_cols = st.columns([0.7, 1.0, 1.0, 1.8, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8])
-        headers = ["Box", "Part", "Brand", "Product", "Details", "L", "B", "H", "GW", "NW", "Del"]
+        header_cols = st.columns([0.7, 1.0, 1.0, 1.8, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8])
+        headers = ["Box", "Part", "Brand", "Product", "Details", "L", "B", "H", "CBM", "GW", "NW", "Del"]
         for col, h in zip(header_cols, headers):
             col.markdown(f"**{h}**")
 
@@ -1197,7 +1197,7 @@ if st.session_state.page == "Create / Edit":
 
         for idx, row in enumerate(clean_packing_rows(st.session_state[packing_state_key])):
             row_key = f"{current_doc_key}_{idx}_{row.get('Brand','')}_{row.get('Product Details','')}_{row.get('Part','')}"
-            c = st.columns([0.7, 1.0, 1.0, 1.8, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8])
+            c = st.columns([0.7, 1.0, 1.0, 1.8, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8])
 
             box_no = idx + 1
             c[0].write(box_no)
@@ -1209,13 +1209,15 @@ if st.session_state.page == "Create / Edit":
             length = c[5].number_input("L", min_value=0.0, value=float(row.get("Length", 0) or 0), step=1.0, key=f"pl_l_{row_key}", label_visibility="collapsed")
             breadth = c[6].number_input("B", min_value=0.0, value=float(row.get("Breadth", 0) or 0), step=1.0, key=f"pl_b_{row_key}", label_visibility="collapsed")
             height = c[7].number_input("H", min_value=0.0, value=float(row.get("Height", 0) or 0), step=1.0, key=f"pl_h_{row_key}", label_visibility="collapsed")
-            gw = c[8].number_input("GW", min_value=0.0, value=float(row.get("GW", 0) or 0), step=0.1, key=f"pl_gw_{row_key}", label_visibility="collapsed")
-            nw = c[9].number_input("NW", min_value=0.0, value=float(row.get("NW", 0) or 0), step=0.1, key=f"pl_nw_{row_key}", label_visibility="collapsed")
 
-            if c[10].button("X", key=f"pl_del_{row_key}"):
+            calculated_cbm = round(float(length or 0) * float(breadth or 0) * float(height or 0) / 1000000, 3)
+            existing_cbm = row.get("CBM", calculated_cbm)
+            cbm_value = c[8].number_input("CBM", min_value=0.0, value=float(existing_cbm or 0), step=0.001, format="%.3f", key=f"pl_cbm_{row_key}", label_visibility="collapsed")
+            gw = c[9].number_input("GW", min_value=0.0, value=float(row.get("GW", 0) or 0), step=0.1, key=f"pl_gw_{row_key}", label_visibility="collapsed")
+            nw = c[10].number_input("NW", min_value=0.0, value=float(row.get("NW", 0) or 0), step=0.1, key=f"pl_nw_{row_key}", label_visibility="collapsed")
+
+            if c[11].button("X", key=f"pl_del_{row_key}"):
                 delete_index = idx
-
-            cbm_value = round(float(length or 0) * float(breadth or 0) * float(height or 0) / 1000000, 3)
 
             updated_rows.append({
                 "Box No": box_no,

@@ -30,3 +30,9 @@ Main file: app.py
 - Invoice DOCX imports now read the packing list table when present.
 - Imported packing rows include Box No, Part, Brand, Product Details, L, B, H, CBM, GW and NW.
 - Packing summary is rebuilt automatically after import.
+
+
+## Final PL CBM Fix
+- Packing List now has a manual CBM input column.
+- CBM values are saved per row.
+- Packing Summary Total CBM adds the manual CBM values.
