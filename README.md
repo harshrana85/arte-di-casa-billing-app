@@ -1,12 +1,10 @@
-# Arte Di Casa Billing System — Updated Fixes
+# Arte Di Casa Billing System — CBM Word Export/Import Fix
 
-## Latest fixes
-- Seller VAT / TRN is now printed clearly on invoice/PDF/Word/Excel outputs.
-- Product entry now has a full-row delete button.
-- Product serial numbers automatically move up after deleting any row.
-- No retyping is needed when deleting row 4 from a long product list.
-- Packing list split rows now insert immediately below the selected item instead of at the bottom.
-- If a product is deleted, its packing rows are removed and packing box numbers reorder automatically.
+## Final Fix
+- Manual CBM values in the Packing List now stay saved.
+- Word/PDF/Excel exports no longer recalculate manual CBM back to zero.
+- Imported Word invoices bring CBM values back into the editable packing list.
+- Older Word files that printed row CBM as zero but had a Total CBM summary will preserve the printed total and place it into the packing data instead of losing it.
 
 ## Login
 Password: 1985
@@ -14,25 +12,3 @@ Password: 1985
 ## Run
 pip install -r requirements.txt
 streamlit run app.py
-
-## Streamlit Cloud
-Upload all files to GitHub and reboot.
-Main file: app.py
-
-## Word Import Feature
-- Go to Create / Edit.
-- Upload an extracted Word file (.docx) in Import Extracted Word File.
-- Click Import Word.
-- Review/edit products and customer details.
-- Save as proforma or convert to invoice, then add packing details.
-
-## Word Invoice Import Update
-- Invoice DOCX imports now read the packing list table when present.
-- Imported packing rows include Box No, Part, Brand, Product Details, L, B, H, CBM, GW and NW.
-- Packing summary is rebuilt automatically after import.
-
-
-## Final PL CBM Fix
-- Packing List now has a manual CBM input column.
-- CBM values are saved per row.
-- Packing Summary Total CBM adds the manual CBM values.

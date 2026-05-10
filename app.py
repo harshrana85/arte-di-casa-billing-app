@@ -200,7 +200,12 @@ def packing_from_products(products, existing=None):
                 row["Part"] = row.get("Part", "1/1")
                 row["Brand"] = p.get("Brand", "")
                 row["Product Details"] = p.get("Product Details", "")
-                row["CBM"] = round(l * b * h * box_qty / 1000000, 3)
+                # Preserve manually-entered CBM. Do not recalculate it back to zero when H/L/B are blank.
+                existing_cbm = row.get("CBM", None)
+                if existing_cbm not in [None, ""]:
+                    row["CBM"] = round(float(existing_cbm or 0), 3)
+                else:
+                    row["CBM"] = round(l * b * h * box_qty / 1000000, 3)
                 row["GW"] = float(row.get("GW", 0) or 0)
                 row["NW"] = float(row.get("NW", 0) or 0)
                 out.append(row)
@@ -680,10 +685,18 @@ def parse_gw_nw(value):
 
 def parse_word_upload(uploaded_file, docs):
     """Import an extracted DOCX/proforma/invoice into the app's editable document structure."""
+    import re
     document = Document(uploaded_file)
     paragraphs = [p.text.strip() for p in document.paragraphs if p.text and p.text.strip()]
+    table_lines = []
+    for tbl in document.tables:
+        for row in tbl.rows:
+            vals = [c.text.strip() for c in row.cells if c.text and c.text.strip()]
+            if vals:
+                table_lines.append(" | ".join(vals))
     full_text = "\n".join(paragraphs)
-    upper_text = full_text.upper()
+    all_text = "\n".join(paragraphs + table_lines)
+    upper_text = all_text.upper()
 
     doc_type = "Invoice" if "INVOICE" in upper_text and "PROFORMA" not in upper_text else "Proforma Invoice"
     currency = "EUR"
@@ -865,6 +878,34 @@ def parse_word_upload(uploaded_file, docs):
             imported["terms"] = full_text.split("TERMS & CONDITIONS", 1)[1].strip() or imported["terms"]
         except Exception:
             pass
+
+    # Read any printed packing summary from the Word file. This is important for older
+    # exported Word files where row CBM values were printed as 0.000 but the summary total existed.
+    summary_matches = re.findall(
+        r"Total\s+Boxes:\s*([0-9.]+).*?Total\s+CBM:\s*([0-9.]+).*?Total\s+GW:\s*([0-9.]+).*?Total\s+NW:\s*([0-9.]+)",
+        all_text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if summary_matches:
+        # Use the last packing summary printed in the document, normally the actual packing-list page.
+        boxes, cbm_total, gw_total, nw_total = summary_matches[-1]
+        imported["packing_summary"] = {
+            "Total Boxes": int(float(boxes or 0)),
+            "Total CBM": round(float(cbm_total or 0), 3),
+            "Total GW": round(float(gw_total or 0), 2),
+            "Total NW": round(float(nw_total or 0), 2),
+            "Manual Override": True,
+        }
+
+    # If the imported table has no row CBM because it was created by the old bug, keep the printed
+    # summary total and put it on the first row so Word/PDF exports do not silently drop CBM again.
+    if imported.get("packing"):
+        row_cbm_total = round(sum(float(r.get("CBM", 0) or 0) for r in imported["packing"]), 3)
+        printed_cbm_total = float(imported.get("packing_summary", {}).get("Total CBM", 0) or 0)
+        if row_cbm_total == 0 and printed_cbm_total > 0:
+            imported["packing"][0]["CBM"] = round(printed_cbm_total, 3)
+        elif row_cbm_total > 0:
+            imported["packing_summary"] = packing_summary(imported["packing"])
 
     if not imported["products"]:
         imported["products"] = [{"Brand":"", "Product Details":"", "Size":"", "Finish":"", "Qty":1.0, "Rate Per Piece":0.0}]
