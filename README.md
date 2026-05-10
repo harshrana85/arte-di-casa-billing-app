@@ -18,3 +18,10 @@ streamlit run app.py
 ## Streamlit Cloud
 Upload all files to GitHub and reboot.
 Main file: app.py
+
+## Word Import Feature
+- Go to Create / Edit.
+- Upload an extracted Word file (.docx) in Import Extracted Word File.
+- Click Import Word.
+- Review/edit products and customer details.
+- Save as proforma or convert to invoice, then add packing details.

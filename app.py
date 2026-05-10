@@ -638,6 +638,160 @@ def build_pdf(docdata):
     pdf.build(story, onFirstPage=lambda c,d: pdf_header_footer(c,d,docdata["type"]), onLaterPages=lambda c,d: pdf_header_footer(c,d,docdata["type"]))
     return buffer.getvalue()
 
+
+def parse_amount_value(value):
+    """Return a float from values such as € 1,234.50, AED 1,234 or 1,234."""
+    txt = str(value or "").replace("€", "").replace("$", "").replace("AED", "").replace(",", "").strip()
+    cleaned = "".join(ch for ch in txt if ch.isdigit() or ch in ".-")
+    try:
+        return float(cleaned) if cleaned not in ["", ".", "-"] else 0.0
+    except Exception:
+        return 0.0
+
+
+def parse_word_upload(uploaded_file, docs):
+    """Import an extracted DOCX/proforma/invoice into the app's editable document structure."""
+    document = Document(uploaded_file)
+    paragraphs = [p.text.strip() for p in document.paragraphs if p.text and p.text.strip()]
+    full_text = "\n".join(paragraphs)
+    upper_text = full_text.upper()
+
+    doc_type = "Invoice" if "INVOICE" in upper_text and "PROFORMA" not in upper_text else "Proforma Invoice"
+    currency = "EUR"
+    for cur in ["EUR", "USD", "AED"]:
+        if cur in upper_text or (cur == "EUR" and "€" in full_text) or (cur == "USD" and "$" in full_text):
+            currency = cur
+            break
+
+    imported = {
+        "id": str(uuid.uuid4()),
+        "type": doc_type,
+        "number": next_number(doc_type, docs),
+        "date": str(date.today()),
+        "currency": currency,
+        "bill_to": {"Company Name":"", "Registration Number":"", "GST/VAT":"", "Contact Person":"", "Phone":"", "Email":"", "Country":"", "Address":""},
+        "ship_same": True,
+        "ship_to": {},
+        "products": [],
+        "discount_type": "Flat Amount",
+        "discount_value": 0.0,
+        "shipping_enabled": False,
+        "shipping_cost": 0.0,
+        "vat_mode": "VAT 5%",
+        "vat_rate": VAT_RATE,
+        "vat_amount": 0.0,
+        "terms": settings.get("terms", "") if 'settings' in globals() else "",
+        "packing": [],
+        "packing_summary": {"Total Boxes": 0, "Total CBM": 0.0, "Total GW": 0.0, "Total NW": 0.0},
+        "total": 0.0,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+    # Document number, date and currency from text if the exported file contains them.
+    for line in paragraphs:
+        low = line.lower()
+        if "no:" in low or "invoice no" in low or "document no" in low:
+            parts = line.replace("|", " ").split()
+            for i, token in enumerate(parts):
+                if token.lower().rstrip(":") in ["no", "number", "no:"] and i + 1 < len(parts):
+                    candidate = parts[i + 1].strip()
+                    if "/" in candidate or "-" in candidate:
+                        imported["number"] = candidate
+                        break
+        if "currency" in low:
+            for cur in ["EUR", "USD", "AED"]:
+                if cur in line.upper():
+                    imported["currency"] = cur
+        if "out of scope" in low:
+            imported["vat_mode"] = "OUT OF SCOPE OF VAT"
+
+    # Read tables. The app export uses clear product and customer tables; this also handles many extracted Word tables.
+    for table in document.tables:
+        rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+        if not rows:
+            continue
+        header = [h.strip().lower() for h in rows[0]]
+        header_join = " | ".join(header)
+
+        # Product rows: SL, Brand, Product Details, Size, Finish, Qty, Rate/PC, Amount
+        if ("brand" in header_join and ("product" in header_join or "description" in header_join) and ("qty" in header_join or "quantity" in header_join)):
+            colmap = {name: idx for idx, name in enumerate(header)}
+            def find_col(*names):
+                for name in names:
+                    for idx, h in enumerate(header):
+                        if name in h:
+                            return idx
+                return None
+            brand_i = find_col("brand")
+            prod_i = find_col("product details", "description", "product")
+            size_i = find_col("size")
+            finish_i = find_col("finish")
+            qty_i = find_col("qty", "quantity")
+            rate_i = find_col("rate", "rate/pc", "rate per piece")
+            amount_i = find_col("amount")
+            for row in rows[1:]:
+                def cell(i): return row[i].strip() if i is not None and i < len(row) else ""
+                details = cell(prod_i)
+                brand = cell(brand_i)
+                if not brand and not details:
+                    continue
+                qty = parse_amount_value(cell(qty_i)) or 1.0
+                rate = parse_amount_value(cell(rate_i))
+                amount = parse_amount_value(cell(amount_i))
+                if not rate and amount and qty:
+                    rate = amount / qty
+                imported["products"].append({
+                    "Brand": brand,
+                    "Product Details": details,
+                    "Size": cell(size_i),
+                    "Finish": cell(finish_i),
+                    "Qty": qty,
+                    "Rate Per Piece": rate,
+                })
+
+        # Bill/ship table from this app's Word export.
+        if len(rows) == 1 and len(rows[0]) >= 1 and "bill to" in rows[0][0].lower():
+            bill_lines = [x.strip() for x in rows[0][0].splitlines() if x.strip() and x.strip().lower() != "bill to"]
+            if bill_lines:
+                imported["bill_to"]["Company Name"] = bill_lines[0]
+                if len(bill_lines) > 1: imported["bill_to"]["Registration Number"] = bill_lines[1]
+                if len(bill_lines) > 2: imported["bill_to"]["GST/VAT"] = bill_lines[2]
+                if len(bill_lines) > 3: imported["bill_to"]["Contact Person"] = bill_lines[3]
+                if len(bill_lines) > 4: imported["bill_to"]["Phone"] = bill_lines[4]
+                if len(bill_lines) > 5: imported["bill_to"]["Email"] = bill_lines[5]
+                if len(bill_lines) > 6: imported["bill_to"]["Address"] = bill_lines[6]
+                if len(bill_lines) > 7: imported["bill_to"]["Country"] = bill_lines[7]
+            if len(rows[0]) > 1 and "same as bill" not in rows[0][1].lower():
+                imported["ship_same"] = False
+                ship_lines = [x.strip() for x in rows[0][1].splitlines() if x.strip() and x.strip().lower() != "ship to"]
+                imported["ship_to"] = {
+                    "Company Name": ship_lines[0] if len(ship_lines) > 0 else "",
+                    "Contact Person": ship_lines[1] if len(ship_lines) > 1 else "",
+                    "Phone": ship_lines[2] if len(ship_lines) > 2 else "",
+                    "Email": ship_lines[3] if len(ship_lines) > 3 else "",
+                    "Address": ship_lines[4] if len(ship_lines) > 4 else "",
+                    "Country": ship_lines[5] if len(ship_lines) > 5 else "",
+                }
+
+    # Terms from extracted Word, when available.
+    if "TERMS & CONDITIONS" in upper_text:
+        try:
+            imported["terms"] = full_text.split("TERMS & CONDITIONS", 1)[1].strip() or imported["terms"]
+        except Exception:
+            pass
+
+    if not imported["products"]:
+        imported["products"] = [{"Brand":"", "Product Details":"", "Size":"", "Finish":"", "Qty":1.0, "Rate Per Piece":0.0}]
+
+    subtotal, disc, shipc, vat_amount, total = calculate(
+        imported["products"], imported["discount_type"], imported["discount_value"], imported["shipping_enabled"], imported["shipping_cost"], imported["vat_mode"]
+    )
+    imported["vat_amount"] = vat_amount
+    imported["total"] = total
+    return imported
+
+
 settings = load_json(SETTINGS_FILE, {"terms":"","password":"1985"})
 st.set_page_config(page_title="Arte Di Casa Billing", layout="wide")
 
@@ -706,7 +860,11 @@ st.caption(f"Current page: {st.session_state.page}")
 
 if st.session_state.page == "Create / Edit":
     editing = next((d for d in documents if d.get("id") == st.session_state.editing_id), None) if st.session_state.editing_id else None
-    if editing:
+    imported_word_doc = st.session_state.get("imported_word_docdata") if not st.session_state.editing_id else None
+    if imported_word_doc:
+        editing = imported_word_doc
+        st.success("Imported Word document loaded. You can edit it, save it, convert it to invoice, and add packing details.")
+    elif editing:
         st.success(f"Editing existing document: {editing.get('number','')}. Saving will update the SAME document.")
     else:
         st.info("Creating a new document.")
@@ -719,12 +877,33 @@ if st.session_state.page == "Create / Edit":
 
     if st.button("Start New Blank Document"):
         st.session_state.editing_id = None
+        st.session_state.pop("imported_word_docdata", None)
         st.session_state.pop("product_rows_new_document", None)
         st.session_state.pop("packing_rows_new_document", None)
         st.session_state.pop("active_product_doc_key", None)
         st.session_state.pop("active_packing_doc_key", None)
         st.session_state.page = "Create / Edit"
         st.rerun()
+
+    st.markdown("<div class='card'><h3 class='gold'>Import Extracted Word File</h3>", unsafe_allow_html=True)
+    uploaded_word = st.file_uploader("Upload extracted Word file (.docx) to bring it into the editor", type=["docx"], key="word_import_upload")
+    import_cols = st.columns([1, 5])
+    if import_cols[0].button("Import Word", key="import_word_button"):
+        if uploaded_word is None:
+            st.warning("Upload a .docx file first.")
+        else:
+            try:
+                imported_doc = parse_word_upload(uploaded_word, documents)
+                st.session_state.imported_word_docdata = imported_doc
+                st.session_state.editing_id = None
+                st.session_state.pop("active_product_doc_key", None)
+                st.session_state.pop("active_packing_doc_key", None)
+                st.success("Word file imported. Review and edit the fields below, then save or convert to invoice.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not import this Word file: {e}")
+    import_cols[1].caption("Best results: upload a Word file exported from this app or an extracted invoice/proforma with a product table containing Brand/Product/Qty/Rate columns.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='card'><h3 class='gold'>Customer Details</h3>", unsafe_allow_html=True)
     names = ["-- New Customer --"] + [c.get("Company Name","") for c in customers]
@@ -1045,6 +1224,7 @@ if st.session_state.page == "Create / Edit":
             documents[idx] = docdata
 
         save_json(DOCUMENTS_FILE, documents)
+        st.session_state.pop("imported_word_docdata", None)
 
         # After save/update, return to Saved Documents list.
         st.session_state.editing_id = None
@@ -1063,6 +1243,7 @@ if st.session_state.page == "Create / Edit":
             newdoc["updated_at"] = datetime.now().isoformat(timespec="seconds")
             documents.append(newdoc)
             save_json(DOCUMENTS_FILE, documents)
+            st.session_state.pop("imported_word_docdata", None)
             st.session_state.editing_id = newdoc["id"]
             st.session_state.page = "Create / Edit"
             st.success(f"Converted to Invoice: {newdoc['number']}. Opening converted invoice for editing/packing details...")
